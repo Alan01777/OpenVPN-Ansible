@@ -1,0 +1,50 @@
+---
+- name: Verify VPN connection
+  hosts: vpn_clients
+  become: yes
+  tasks:
+    - name: Ping VPN server from client
+      command: ping -c 4 10.8.0.1
+      register: ping_result
+      ignore_errors: yes
+
+    - name: Display ping result
+      debug:
+        var: ping_result
+
+    - name: Check routing table
+      command: ip route
+      register: route_result
+
+    - name: Display routing table
+      debug:
+        var: route_result
+
+    - name: Check VPN interface
+      command: ip addr show tun0
+      register: interface_result
+
+    - name: Display VPN interface
+      debug:
+        var: interface_result
+
+- name: Verify VPN connection from server
+  hosts: vpn_server
+  become: yes
+  tasks:
+    - name: Ping VPN client from server
+      command: ping -c 4 10.8.0.10
+      register: ping_result
+      ignore_errors: yes
+
+    - name: Display ping result
+      debug:
+        var: ping_result
+
+    - name: Check VPN interface
+      command: ip addr show tun0
+      register: interface_result
+
+    - name: Display VPN interface
+      debug:
+        var: interface_result

@@ -1,0 +1,76 @@
+- name: Generate client certificates
+  hosts: vpn_server
+  become: yes
+  tasks:
+    - name: Remove existing request files for each host in vpn_clients
+      file:
+        path: "/etc/openvpn/easy-rsa/pki/reqs/{{ item }}.req"
+        state: absent
+      with_items: "{{ groups['vpn_clients'] }}"
+
+    - name: Remove existing key files for each host in vpn_clients
+      file:
+        path: "/etc/openvpn/easy-rsa/pki/private/{{ item }}.key"
+        state: absent
+      with_items: "{{ groups['vpn_clients'] }}"
+
+    - name: Remove existing certificate files for each host in vpn_clients
+      file:
+        path: "/etc/openvpn/easy-rsa/pki/issued/{{ item }}.crt"
+        state: absent
+      with_items: "{{ groups['vpn_clients'] }}"
+
+    - name: Generate client certificates for each host in vpn_clients
+      command: ./easyrsa build-client-full {{ item }} nopass
+      args:
+        chdir: /etc/openvpn/easy-rsa
+      environment:
+        EASYRSA_BATCH: "yes"
+      with_items: "{{ groups['vpn_clients'] }}"
+      register: client_certificates
+
+    - name: Create directories for client configurations
+      file:
+        path: "./client-configs/{{ item }}"
+        state: directory
+        mode: '0755'
+      with_items: "{{ groups['vpn_clients'] }}"
+
+    - name: Copy client certificates to local machine
+      fetch:
+        src: "/etc/openvpn/easy-rsa/pki/issued/{{ item }}.crt"
+        dest: "./client-configs/{{ item }}/"
+        flat: yes
+      with_items: "{{ groups['vpn_clients'] }}"
+
+    - name: Copy client keys to local machine
+      fetch:
+        src: "/etc/openvpn/easy-rsa/pki/private/{{ item }}.key"
+        dest: "./client-configs/{{ item }}/"
+        flat: yes
+      with_items: "{{ groups['vpn_clients'] }}"
+
+    - name: Copy CA certificate to local machine
+      fetch:
+        src: "/etc/openvpn/ca.crt"
+        dest: "./client-configs/ca.crt"
+        flat: yes
+      when: item == groups['vpn_clients'][0]
+      with_items: "{{ groups['vpn_clients'] }}"
+
+    - name: Generate .ovpn files for each client
+      template:
+        src: client.ovpn.j2
+        dest: "./client-configs/{{ item }}/client.ovpn"
+      with_items: "{{ groups['vpn_clients'] }}"
+      vars:
+        ca_cert: "{{ lookup('file', './client-configs/ca.crt') }}"
+        client_cert: "{{ lookup('file', './client-configs/' + item + '/' + item + '.crt') }}"
+        client_key: "{{ lookup('file', './client-configs/' + item + '/' + item + '.key') }}"
+    
+    - name: Copy client configuration files local machine
+      fetch:
+        src: "./client-configs/{{ item }}/client.ovpn"
+        dest: "./client-configs/{{ item }}/"
+        flat: yes
+      with_items: "{{ groups['vpn_clients'] }}"

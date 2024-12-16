@@ -1,0 +1,53 @@
+- name: Post creation script
+  hosts: all
+  tasks:
+    - name: Update update && Upgrade
+      apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Install sudo
+      apt:
+        name: sudo
+        state: present
+
+    - name: Define root password
+      user:
+        name: root
+        password: "{{ 'wow01777121518' | password_hash('sha512') }}"
+
+    - name: Create non-root user
+      user:
+        name: "{{ non_root_user }}"
+        state: present
+        groups: sudo
+        append: yes
+        password: "{{ 'wow01777121518' | password_hash('sha512') }}"
+
+    - name: Copy SSH key
+      authorized_key:
+        user: "{{ non_root_user }}"
+        key: "{{ lookup('file', '~/.ssh/new_droplet_key.pub') }}"
+        
+    - name: Disable root login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin\s+'
+        line: 'PermitRootLogin no'
+        state: present
+      notify: Restart SSH
+
+    - name: Reboot the server
+      reboot:
+        msg: "Reboot initiated by Ansible for configuration changes"
+        connect_timeout: 5
+        reboot_timeout: 600
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted

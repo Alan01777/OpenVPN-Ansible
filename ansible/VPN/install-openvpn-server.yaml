@@ -1,0 +1,129 @@
+# install openVPN Server on debian based systems
+---
+- name: Install OpenVPN
+  hosts: vpn_server
+  become: yes
+  tasks:
+    - name: Update update && Upgrade
+      apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Install OpenVPN and Easy-RSA
+      apt:
+        name:
+          - openvpn
+          - easy-rsa
+        state: present
+
+    - name: Create the Easy-RSA directory
+      file:
+        path: /etc/openvpn/easy-rsa
+        state: directory
+        mode: '0755'
+
+    - name: Copy Easy-RSA scripts
+      shell: cp -r $(find /usr/share -type d -name 'easy-rsa*' | head -n 1)/* /etc/openvpn/easy-rsa/
+
+    - name: Set up the Easy-RSA vars file
+      copy:
+        dest: /etc/openvpn/easy-rsa/vars
+        content: |
+          set_var EASYRSA_REQ_COUNTRY    "US"
+          set_var EASYRSA_REQ_PROVINCE   "California"
+          set_var EASYRSA_REQ_CITY       "San Francisco"
+          set_var EASYRSA_REQ_ORG        "MyOrg"
+          set_var EASYRSA_REQ_EMAIL      "camp.alan3@gmail.com"
+          set_var EASYRSA_REQ_OU         "MyOrgUnit"
+          set_var EASYRSA_KEY_SIZE       2048
+          set_var EASYRSA_ALGO           rsa
+          set_var EASYRSA_CA_EXPIRE      3650
+          set_var EASYRSA_CERT_EXPIRE    3650
+          set_var EASYRSA_CRL_DAYS       180
+
+    - name: Initialize the PKI
+      command: ./easyrsa init-pki
+      args:
+        chdir: /etc/openvpn/easy-rsa
+
+    - name: Build the CA
+      command: ./easyrsa build-ca nopass
+      args:
+        chdir: /etc/openvpn/easy-rsa
+      environment:
+        EASYRSA_BATCH: "yes"
+
+    - name: Generate the server certificate and key
+      command: ./easyrsa build-server-full server nopass
+      args:
+        chdir: /etc/openvpn/easy-rsa
+      environment:
+        EASYRSA_BATCH: "yes"
+
+    - name: Generate the Diffie-Hellman parameters
+      command: ./easyrsa gen-dh
+      args:
+        chdir: /etc/openvpn/easy-rsa
+
+    - name: Copy the server certificate, key, and CA certificate
+      copy:
+        remote_src: yes
+        src: /etc/openvpn/easy-rsa/pki/ca.crt
+        dest: /etc/openvpn/ca.crt
+
+    - name: Copy the server certificate
+      copy:
+        remote_src: yes
+        src: /etc/openvpn/easy-rsa/pki/issued/server.crt
+        dest: /etc/openvpn/server.crt
+
+    - name: Copy the server key
+      copy:
+        remote_src: yes
+        src: /etc/openvpn/easy-rsa/pki/private/server.key
+        dest: /etc/openvpn/server.key
+
+    - name: Copy the Diffie-Hellman parameters
+      copy:
+        remote_src: yes
+        src: /etc/openvpn/easy-rsa/pki/dh.pem
+        dest: /etc/openvpn/dh2048.pem
+
+    - name: Create the OpenVPN server configuration file
+      copy:
+        dest: /etc/openvpn/server.conf
+        content: |
+          port 1194
+          proto udp
+          dev tun
+          ca ca.crt
+          cert server.crt
+          key server.key
+          dh dh2048.pem
+          server 10.8.0.0 255.255.255.0
+          ifconfig-pool-persist ipp.txt
+          push "route 192.168.10.0 255.255.255.0"
+          push "route 192.168.20.0 255.255.255.0"
+          push "dhcp-option DNS 8.8.8.8"
+          push "dhcp-option DNS 8.8.4.4"
+          keepalive 10 120
+          compress lz4-v2
+          user nobody
+          group nogroup
+          persist-key
+          persist-tun
+          status openvpn-status.log
+          log-append /var/log/openvpn.log
+          verb 4
+          management localhost 7505
+          tls-auth ta.key 0
+          tls-version-min 1.2
+          cipher AES-256-CBC
+          auth SHA256
+
+    - name: Enable and start the OpenVPN service
+      systemd:
+        name: openvpn@server
+        enabled: yes
+        state: started

@@ -1,0 +1,31 @@
+---
+- name: Install OpenVPN client
+  hosts: vpn_clients
+  become: yes
+  tasks:
+    - name: Update package index
+      apt:
+        update_cache: yes
+
+    - name: Install OpenVPN client
+      apt:
+        name: openvpn
+        state: present
+
+    - name: Create OpenVPN client configuration directory
+      file:
+        path: /etc/openvpn/client
+        state: directory
+        mode: '0755'
+
+    - name: Copy client configuration file
+      copy:
+        src: "./client-configs/{{ inventory_hostname }}/client.ovpn"
+        dest: /etc/openvpn/client/client.conf
+        mode: '0644'
+
+    - name: Start OpenVPN client service
+      systemd:
+        name: openvpn-client@client
+        enabled: yes
+        state: started
