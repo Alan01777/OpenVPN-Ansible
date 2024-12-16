@@ -15,7 +15,7 @@
     - name: Define root password
       user:
         name: root
-        password: "{{ 'wow01777121518' | password_hash('sha512') }}"
+        password: "{{ 'admin@2024' | password_hash('sha512') }}"
 
     - name: Create non-root user
       user:
@@ -23,7 +23,7 @@
         state: present
         groups: sudo
         append: yes
-        password: "{{ 'wow01777121518' | password_hash('sha512') }}"
+        password: "{{ 'admin@2024' | password_hash('sha512') }}"
 
     - name: Copy SSH key
       authorized_key:
